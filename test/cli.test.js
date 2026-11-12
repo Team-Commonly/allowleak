@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
@@ -124,4 +124,39 @@ test('no files, clean files and unknown options', (t) => {
   settings(dir, 'settings.json', ['Bash(npm test)']);
   assert.equal(cli([dir]).code, 0);
   assert.equal(cli([dir, '--nope']).code, 2);
+});
+
+test('a settings file that is not valid JSON fails closed and says so', (t) => {
+  const dir = repo();
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  mkdirSync(join(dir, '.claude'));
+  writeFileSync(join(dir, '.claude', 'settings.json'), '{ "permissions": ');
+  const { code, text } = cli([dir]);
+  assert.equal(code, 2);
+  assert.match(text, /not valid JSON, so it was not checked/);
+});
+
+test('a symlinked .claude folder is read, and so is `allowleak .claude`', (t) => {
+  const dir = repo();
+  const real = mkdtempSync(join(os.tmpdir(), 'allowleak-real-'));
+  t.after(() => { rmSync(dir, { recursive: true, force: true }); rmSync(real, { recursive: true, force: true }); });
+  writeFileSync(join(real, 'settings.json'), JSON.stringify({ permissions: { allow: [`Bash(redis-cli -a ${PW} PING)`] } }));
+  try { symlinkSync(real, join(dir, '.claude'), 'dir'); } catch { t.skip('no symlinks here'); return; }
+  assert.equal(cli([dir]).code, 1);
+  assert.equal(cli([join(dir, '.claude')]).code, 1);
+});
+
+test('one symlinked .claude folder does not spoil the status of the others', (t) => {
+  const dir = repo();
+  const real = mkdtempSync(join(os.tmpdir(), 'allowleak-real-'));
+  t.after(() => { rmSync(dir, { recursive: true, force: true }); rmSync(real, { recursive: true, force: true }); });
+  writeFileSync(join(dir, '.gitignore'), 'settings.local.json\n');
+  mkdirSync(join(dir, 'app', '.claude'), { recursive: true });
+  writeFileSync(join(dir, 'app', '.claude', 'settings.local.json'), JSON.stringify({ permissions: { allow: [`Bash(redis-cli -a ${PW} PING)`] } }));
+  writeFileSync(join(real, 'settings.json'), JSON.stringify({ permissions: { allow: ['Bash(npm test)'] } }));
+  mkdirSync(join(dir, 'other'));
+  try { symlinkSync(real, join(dir, 'other', '.claude'), 'dir'); } catch { t.skip('no symlinks here'); return; }
+  const { code, text } = cli([dir]);
+  assert.equal(code, 0, text);
+  assert.match(text, /ignored by git/);
 });

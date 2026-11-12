@@ -13,7 +13,7 @@ allowleak: 3 credentials in 2 files.
 
 .claude/settings.local.json  (not committed yet, and not ignored by git)
   line 15  mysql -p••••                        password after -p
-  line 16  postgresql://app:••••@db.acme.dev   password in a URL
+  line 16  postgresql://…:••••@…               password in a URL
 
 .codex/rules/default.rules  (committed)
   line 3  GitHub token
@@ -25,12 +25,12 @@ It shows where each credential is and what kind it is. It never prints the crede
 
 ## Why a secret scanner misses these
 
-We ran gitleaks 8.30.1 with its default config over 40 allow rules that each carry a credential, written the way they sit in `.claude/settings.local.json`. We ran it 10 times with fresh values each time.
+We ran gitleaks 8.30.1 with its default config over 42 allow rules that each carry a credential, written the way they sit in `.claude/settings.local.json`. We ran it 10 times with fresh values each time.
 
 | | gitleaks | allowleak |
 |---|---|---|
-| Passwords of 20 random characters | 49% | 100% |
-| Passwords a person would pick | 35% | 100% |
+| Passwords of 20 random characters | 51% | 100% |
+| Passwords a person would pick | 38% | 100% |
 | Rules with no credential, flagged | 0 of 120 | 0 of 120 |
 
 gitleaks missed two kinds of rule.
@@ -111,7 +111,7 @@ It leaves alone values that only name a secret: `$DB_PASSWORD`, `${{ secrets.TOK
 - a short random key with no known prefix, no telling flag and no telling name
 - secrets in Codex's `config.toml` or in `.mcp.json`, which it doesn't read yet
 
-Claude Code's team has said they're looking into scrubbing secrets from these files. If that ships, you'll need less of this.
+Claude Code's team said [on Hacker News](https://news.ycombinator.com/item?id=50407882) that they're looking into scrubbing secrets from these files. If that ships, you'll need less of this.
 
 ## Privacy
 

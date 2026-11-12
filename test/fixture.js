@@ -2,12 +2,16 @@
 // Every value is generated at run time from parts; nothing secret-looking is stored here.
 import { randomBytes } from 'node:crypto';
 const AL = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-const r = (n, al = AL) => Array.from(randomBytes(n), (b) => al[b % al.length]).join('');
+// Every generated value is recorded, so a test can check that no part of any of them is printed.
+export const MADE = [];
+const keep = (v) => { MADE.push(v); return v; };
+const r = (n, al = AL) => keep(Array.from(randomBytes(n), (b) => al[b % al.length]).join(''));
 const up = (n) => r(n, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0234567');
 const digits = (n) => r(n, '0123456789');
 const b64u = (s) => Buffer.from(s).toString('base64url');
 
 export function fixture(pwStyle = "random") {
+  MADE.length = 0;
   // pwStyle 'human': a person's password, built from parts. 'random': 20 random chars (gitleaks' best case).
   const pw = () => (pwStyle === 'human' ? ['Summer', 'Winter', 'Falcon'][randomBytes(1)[0] % 3] + digits(4) + '!' : r(20));
   const tok = [
@@ -35,7 +39,7 @@ export function fixture(pwStyle = "random") {
     ['redis-a', `Bash(redis-cli -h cache.acme.dev -a ${pw()} PING)`],
     ['sshpass', `Bash(sshpass -p '${pw()}' ssh deploy@10.0.0.5:*)`],
     ['curl-u', `Bash(curl -u admin:${pw()} https://jenkins.acme.dev/api/json:*)`],
-    ['basic-auth', `Bash(curl -H \"Authorization: Basic ${Buffer.from('admin:' + pw()).toString('base64')}\" https://grafana.acme.dev/api/health)`],
+    ['basic-auth', `Bash(curl -H \"Authorization: Basic ${keep(Buffer.from('admin:' + pw()).toString('base64'))}\" https://grafana.acme.dev/api/health)`],
     ['bearer-opaque', `Bash(curl -H \"Authorization: Bearer ${r(40)}\" https://api.acme.dev/v1/users:*)`],
     ['x-api-key', `Bash(curl -H \"X-API-Key: ${r(32)}\" https://api.acme.dev/v2/reports:*)`],
     ['query-key', `Bash(curl \"https://api.weather.acme.dev/v1/forecast?api_key=${r(32)}&q=SF\")`],
@@ -53,6 +57,8 @@ export function fixture(pwStyle = "random") {
     ['vercel-token', `Bash(vercel deploy --prod --token ${r(24)})`],
     ['mongodump-uri', `Bash(mongodump --uri \"mongodb://admin:${pw()}@db.acme.dev:27017/app\" --out backup)`],
     ['lftp', `Bash(lftp -u admin,${pw()} ftp.acme.dev:*)`],
+    ['npm-config-set-eq', `Bash(npm config set //registry.npmjs.org/:_authToken=${r(36)} --location project)`],
+    ['pnpm-config-set', `Bash(pnpm config set --global //npm.pkg.github.com/:_authToken ${'gh' + 'p_' + r(36)})`],
   ];
   const benign = [
     'Bash(npm run test:*)', 'Bash(git push origin main)', 'Bash(curl -s https://api.github.com/repos/acme/app/pulls)',
@@ -99,4 +105,7 @@ export const NEAR_MISSES = [
   'Bash(npx -y @modelcontextprotocol/server-github)',
   'Bash(python -m pytest tests/test_token_refresh.py)',
   'Bash(cat ~/.aws/credentials)',
+  'Bash(gh secret set DEPLOY_TOKEN --env production)',
+  'Bash(gh secret set DEPLOY_TOKEN --body "$TOKEN")',
+  'Bash(gh secret set DEPLOY_TOKEN < token.txt)',
 ];
