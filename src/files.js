@@ -39,13 +39,14 @@ export function walk(start) {
     }
   };
   visit(dir, 0);
-  const root = gitRoot(dir);
-  const rels = root ? found.map((p) => relative(root, p).split('\\').join('/')) : [];
-  const tracked = new Set(root && rels.length ? (git(root, ['ls-files', '-z', '--', ...rels]) || '').split('\0').filter(Boolean) : []);
-  const ignored = new Set(root && rels.length ? (git(root, ['check-ignore', '--stdin', '-z'], rels.join('\0') + '\0') || '').split('\0').filter(Boolean) : []);
-  return found.sort().map((abs, i) => {
-    const rel = root ? rels[i] : relative(dir, abs);
-    const status = !root ? 'no-git' : tracked.has(rel) ? 'tracked' : ignored.has(rel) ? 'ignored' : 'untracked';
+  // Ask git about each file by its path from `dir`, run inside `dir`. git answers in the same
+  // terms, so there is no root to line up (Windows short names, macOS /private/var).
+  const inGit = Boolean(gitRoot(dir));
+  const rels = found.map((p) => relative(dir, p).split('\\').join('/'));
+  const tracked = new Set(inGit && rels.length ? (git(dir, ['ls-files', '-z', '--', ...rels]) || '').split('\0').filter(Boolean) : []);
+  const ignored = new Set(inGit && rels.length ? (git(dir, ['check-ignore', '--stdin', '-z'], rels.join('\0') + '\0') || '').split('\0').filter(Boolean) : []);
+  return found.map((abs, i) => [abs, rels[i]]).sort((a, b) => (a[1] < b[1] ? -1 : 1)).map(([abs, rel]) => {
+    const status = !inGit ? 'no-git' : tracked.has(rel) ? 'tracked' : ignored.has(rel) ? 'ignored' : 'untracked';
     return { path: relative(process.cwd(), abs) || abs, status, read: () => readSmall(abs) };
   });
 }
