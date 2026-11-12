@@ -2,12 +2,16 @@
 // Every value is generated at run time from parts; nothing secret-looking is stored here.
 import { randomBytes } from 'node:crypto';
 const AL = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
-const r = (n, al = AL) => Array.from(randomBytes(n), (b) => al[b % al.length]).join('');
+// Every generated value is recorded, so a test can check that no part of any of them is printed.
+export const MADE = [];
+const keep = (v) => { MADE.push(v); return v; };
+const r = (n, al = AL) => keep(Array.from(randomBytes(n), (b) => al[b % al.length]).join(''));
 const up = (n) => r(n, 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0234567');
 const digits = (n) => r(n, '0123456789');
 const b64u = (s) => Buffer.from(s).toString('base64url');
 
 export function fixture(pwStyle = "random") {
+  MADE.length = 0;
   // pwStyle 'human': a person's password, built from parts. 'random': 20 random chars (gitleaks' best case).
   const pw = () => (pwStyle === 'human' ? ['Summer', 'Winter', 'Falcon'][randomBytes(1)[0] % 3] + digits(4) + '!' : r(20));
   const tok = [
@@ -35,7 +39,7 @@ export function fixture(pwStyle = "random") {
     ['redis-a', `Bash(redis-cli -h cache.acme.dev -a ${pw()} PING)`],
     ['sshpass', `Bash(sshpass -p '${pw()}' ssh deploy@10.0.0.5:*)`],
     ['curl-u', `Bash(curl -u admin:${pw()} https://jenkins.acme.dev/api/json:*)`],
-    ['basic-auth', `Bash(curl -H \"Authorization: Basic ${Buffer.from('admin:' + pw()).toString('base64')}\" https://grafana.acme.dev/api/health)`],
+    ['basic-auth', `Bash(curl -H \"Authorization: Basic ${keep(Buffer.from('admin:' + pw()).toString('base64'))}\" https://grafana.acme.dev/api/health)`],
     ['bearer-opaque', `Bash(curl -H \"Authorization: Bearer ${r(40)}\" https://api.acme.dev/v1/users:*)`],
     ['x-api-key', `Bash(curl -H \"X-API-Key: ${r(32)}\" https://api.acme.dev/v2/reports:*)`],
     ['query-key', `Bash(curl \"https://api.weather.acme.dev/v1/forecast?api_key=${r(32)}&q=SF\")`],

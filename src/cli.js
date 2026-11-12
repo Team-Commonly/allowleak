@@ -67,20 +67,22 @@ export function run(argv, { out = (s) => process.stdout.write(s + '\n'), err = (
 
   const counts = (r) => r.status !== 'ignored' || flags.has('--strict');
   const failing = results.filter((r) => r.findings.length && counts(r));
+  const broken = results.filter((r) => r.error);
   const total = results.reduce((n, r) => n + r.findings.length, 0);
 
   if (flags.has('--json')) {
     out(JSON.stringify({ checked: source.files.length, credentials: total, files: results }, null, 2));
-    return failing.length ? 1 : 0;
+    return broken.length ? 2 : failing.length ? 1 : 0;
   }
+  for (const r of broken) err(`allowleak: ${r.path} is ${r.error}, so it was not checked.`);
   if (!source.files.length) {
     out(flags.has('--staged') ? 'allowleak: no agent settings or rules files are staged.' : 'allowleak: found no agent settings or rules files.');
     return 0;
   }
   if (!total) {
-    out(`allowleak: no credentials in ${source.files.length} file${source.files.length === 1 ? '' : 's'}.`);
+    out(`allowleak: no credentials in ${source.files.length - broken.length} file${source.files.length - broken.length === 1 ? '' : 's'}.`);
     for (const r of results.filter((x) => x.localTracked)) out(`note: ${r.path} is committed. Claude Code keeps this file for one machine and adds it to .gitignore when it creates it.`);
-    return 0;
+    return broken.length ? 2 : 0;
   }
   out(`allowleak: ${total} credential${total === 1 ? '' : 's'} in ${results.filter((r) => r.findings.length).length} file${results.length === 1 ? '' : 's'}.\n`);
   for (const r of results.filter((x) => x.findings.length)) {
@@ -94,5 +96,5 @@ export function run(argv, { out = (s) => process.stdout.write(s + '\n'), err = (
   if (flags.has('--history')) out('These are in git history. Deleting the rule now does not remove them; change each credential.');
   else if (failing.length) out('Delete those rules, then change each credential. If one was ever committed, it is in your git history: run allowleak --history.');
   else out('Every file above is ignored by git, so none of this is headed for a commit. Pass --strict to fail on it anyway.');
-  return failing.length ? 1 : 0;
+  return failing.length ? 1 : broken.length ? 2 : 0;
 }

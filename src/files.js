@@ -3,7 +3,7 @@
 import { execFileSync } from 'node:child_process';
 import { existsSync, readdirSync, readFileSync, realpathSync, statSync } from 'node:fs';
 import os from 'node:os';
-import { isAbsolute, join, relative } from 'node:path';
+import { isAbsolute, join, relative, resolve } from 'node:path';
 
 export const WANTED = (rel) => /(^|\/)\.claude\/settings(\.local)?\.json$/.test(rel) || /(^|\/)\.codex\/rules\/[^/]+\.rules$/.test(rel);
 const SKIP = new Set(['.git', 'node_modules', '.venv', 'venv', '__pycache__', 'target', 'dist', 'build', '.next', '.cache', 'vendor', '.turbo', '.gradle']);
@@ -21,19 +21,30 @@ export const gitRoot = (dir) => git(dir, ['rev-parse', '--show-toplevel'])?.trim
 
 /** Every settings and rules file under `dir`, with whether git tracks, ignores or doesn't know it. */
 export function walk(start) {
-  // Real paths, so a folder reached through a symlink (macOS /var is /private/var) lines up with git's root.
-  let dir;
-  try { dir = realpathSync(start); } catch { return []; }
+  // The path as given, not its real path: a symlinked .claude folder must still read as .claude.
+  const dir = resolve(start);
+  if (!existsSync(dir)) return [];
   const found = [];
+  const seenDirs = new Set();
   const visit = (abs, depth) => {
     if (depth > 40) return;
+    try {
+      const real = realpathSync(abs);
+      if (seenDirs.has(real)) return; // a symlink loop
+      seenDirs.add(real);
+    } catch { return; }
     let entries;
     try { entries = readdirSync(abs, { withFileTypes: true }); } catch { return; }
     for (const e of entries) {
       const p = join(abs, e.name);
-      if (e.isDirectory()) {
+      let isDir = e.isDirectory();
+      let isFile = e.isFile();
+      if (e.isSymbolicLink()) {
+        try { const st = statSync(p); isDir = st.isDirectory(); isFile = st.isFile(); } catch { continue; }
+      }
+      if (isDir) {
         if (!SKIP.has(e.name)) visit(p, depth + 1);
-      } else if (e.isFile() && WANTED(relative(dir, p).split('\\').join('/'))) {
+      } else if (isFile && WANTED(p.split('\\').join('/'))) {
         found.push(p);
       }
     }
@@ -74,7 +85,7 @@ export function staged(dir) {
 export function history(dir) {
   const root = gitRoot(dir);
   if (!root) return { error: 'not inside a git repository' };
-  const log = git(root, ['log', '--all', '--diff-filter=AM', '--format=@%H', '--name-only', '--', ':(glob)**/.claude/settings*.json', ':(glob)**/.codex/rules/*.rules']) || '';
+  const log = git(root, ['log', '--all', '--diff-filter=AMR', '--format=@%H', '--name-only', '--', ':(glob)**/.claude/settings*.json', ':(glob)**/.codex/rules/*.rules']) || '';
   const files = [];
   let commit = null;
   for (const line of log.split('\n')) {
