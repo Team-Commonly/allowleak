@@ -53,7 +53,7 @@ const SHORT = {
 const LONG = /^--(password|passwd|pass|token|api[-_]?key|apikey|secret|client[-_]secret|access[-_]token|auth[-_]token|bearer[-_]token|private[-_]key|storepass|keypass|http[-_]password|ftp[-_]password|proxy[-_]password|oauth2[-_]bearer|registry[-_]password|db[-_]password|admin[-_]password|passphrase)$/i;
 // For these, a lowercase name (db-password, id_ed25519) or a build-secret spec (id=x,src=y) is a name, not a secret.
 const NAMED = /^--(secret|private[-_]key)$/i;
-const isNameNotSecret = (flag, v) => NAMED.test(flag) && (/^[a-z][a-z0-9._-]*$/.test(v) || /(^|,)(id|src|source|env|type|target)=/.test(v));
+const isNameNotSecret = (flag, v) => NAMED.test(flag) && ((/^[a-z][a-z0-9._-]*$/.test(v) && !/^(0x)?[0-9a-f]{32,}$/.test(v)) || /(^|,)(id|src|source|env|type|target)=/.test(v));
 const WRAPPERS = new Set(['sudo', 'env', 'time', 'nice', 'nohup', 'exec', 'command', 'npx', 'pnpx', 'bunx', 'xargs', 'doas']);
 const HEADER = /(?:^|[=\s'"])(authorization|proxy-authorization|x-api-key|api-key|apikey|x-auth-token|x-access-token|private-token|x-token|x-vault-token|x-goog-api-key|ocp-apim-subscription-key|cookie)\s*:\s*(.+)$/i;
 const AUTH_SCHEME = /^(basic|bearer|token|bot|digest|apikey|key|sso-key)\s+/i;
@@ -76,13 +76,23 @@ const program = (words) => {
   return { name: (words[i] || '').split('/').pop(), args: words.slice(i + 1) };
 };
 
+// Last check before a finding leaves: if its location or label holds any piece of the value
+// (8 characters, or the whole of a shorter value), fall back to text that holds none.
+const leaks = (text, value) => {
+  const v = String(value);
+  if (v.length < 8) return v.length >= 4 && text.includes(v);
+  for (let i = 0; i + 8 <= v.length; i += 1) if (text.includes(v.slice(i, i + 8))) return true;
+  return false;
+};
+const finding = (label, where, value) => (leaks(`${label} ${where}`, value) ? { label: 'credential', where: MASK, value } : { label, where, value });
+
 /** Findings in a shell command line. */
 export function inCommand(command) {
   const found = [];
   const add = (label, where, value) => {
     if (isReference(value)) return;
     if (found.some((x) => x.value.includes(value) || value.includes(x.value))) return;
-    found.push({ label, where, value });
+    found.push(finding(label, where, value));
   };
   for (const { label, value } of formatsIn(command)) add(label, label, value);
 
@@ -99,8 +109,11 @@ export function inCommand(command) {
     }
     // `aws configure set aws_secret_access_key X`, `npm config set //host/:_authToken X`, `git config --global x.token X`
     const set = args.indexOf('set');
-    if (set >= 0 && args[set + 2] !== undefined && (isSecretName(args[set + 1].split(/[.:/]/).pop().replace(/^_/, '')) || /:_(auth|authToken|password)$/.test(args[set + 1]))) {
-      add(`secret set for ${args[set + 1].split(/[.:/]/).pop()}`, `${name} … set ${MASK}`, args[set + 2]);
+    const setKey = set >= 0 ? args[set + 1] : undefined;
+    const setValue = set >= 0 ? args[set + 2] : undefined;
+    if (setKey !== undefined && setValue !== undefined && !setKey.includes('=') && !/^[-<>|]/.test(setValue)
+      && (isSecretName(setKey.split(/[.:/]/).pop().replace(/^_/, '')) || /:_(auth|authToken|password)$/.test(setKey))) {
+      add('secret given to config set', `${name} … set … ${MASK}`, setValue);
     }
     const short = SHORT[name];
     for (let j = 0; j < args.length; j += 1) {
@@ -175,7 +188,7 @@ export function inValue(text) {
   const add = (label, where, value) => {
     if (isReference(value)) return;
     if (found.some((x) => x.value.includes(value) || value.includes(x.value))) return;
-    found.push({ label, where, value });
+    found.push(finding(label, where, value));
   };
   for (const { label, value } of formatsIn(text)) add(label, label, value);
   inText(String(text), add);
@@ -186,7 +199,7 @@ export function inValue(text) {
 export function inEnv(name, value) {
   const found = inValue(value);
   if (!found.length && isSecretName(name) && !isReference(value) && String(value).length >= 4 && !isPathLike(String(value))) {
-    found.push({ label: `secret in ${name}`, where: `${name}=${MASK}`, value: String(value) });
+    found.push(finding(`secret in ${name}`, `${name}=${MASK}`, String(value)));
   }
   return found;
 }

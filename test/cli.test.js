@@ -145,3 +145,18 @@ test('a symlinked .claude folder is read, and so is `allowleak .claude`', (t) =>
   assert.equal(cli([dir]).code, 1);
   assert.equal(cli([join(dir, '.claude')]).code, 1);
 });
+
+test('one symlinked .claude folder does not spoil the status of the others', (t) => {
+  const dir = repo();
+  const real = mkdtempSync(join(os.tmpdir(), 'allowleak-real-'));
+  t.after(() => { rmSync(dir, { recursive: true, force: true }); rmSync(real, { recursive: true, force: true }); });
+  writeFileSync(join(dir, '.gitignore'), 'settings.local.json\n');
+  mkdirSync(join(dir, 'app', '.claude'), { recursive: true });
+  writeFileSync(join(dir, 'app', '.claude', 'settings.local.json'), JSON.stringify({ permissions: { allow: [`Bash(redis-cli -a ${PW} PING)`] } }));
+  writeFileSync(join(real, 'settings.json'), JSON.stringify({ permissions: { allow: ['Bash(npm test)'] } }));
+  mkdirSync(join(dir, 'other'));
+  try { symlinkSync(real, join(dir, 'other', '.claude'), 'dir'); } catch { t.skip('no symlinks here'); return; }
+  const { code, text } = cli([dir]);
+  assert.equal(code, 0, text);
+  assert.match(text, /ignored by git/);
+});

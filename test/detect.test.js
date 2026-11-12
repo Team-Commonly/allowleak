@@ -125,3 +125,9 @@ test('everyday rules the review found flagged, now quiet', () => {
     'Bash(docker compose run -p 3000:3000 web npm run login)',
   ]) assert.deepEqual(inClaudeRule(rule).map((f) => f.where), [], rule);
 });
+
+test('a hex private key after --private-key is found; a key file name is not', () => {
+  const hex = '0x' + 'ac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80';
+  assert.ok(inClaudeRule(`Bash(cast send --private-key ${hex} 0xabc "f()")`).length);
+  assert.deepEqual(inClaudeRule('Bash(ssh-add --private-key=id_ed25519)'), []);
+});

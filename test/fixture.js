@@ -57,6 +57,8 @@ export function fixture(pwStyle = "random") {
     ['vercel-token', `Bash(vercel deploy --prod --token ${r(24)})`],
     ['mongodump-uri', `Bash(mongodump --uri \"mongodb://admin:${pw()}@db.acme.dev:27017/app\" --out backup)`],
     ['lftp', `Bash(lftp -u admin,${pw()} ftp.acme.dev:*)`],
+    ['npm-config-set-eq', `Bash(npm config set //registry.npmjs.org/:_authToken=${r(36)} --location project)`],
+    ['pnpm-config-set', `Bash(pnpm config set --global //npm.pkg.github.com/:_authToken ${'gh' + 'p_' + r(36)})`],
   ];
   const benign = [
     'Bash(npm run test:*)', 'Bash(git push origin main)', 'Bash(curl -s https://api.github.com/repos/acme/app/pulls)',
@@ -103,4 +105,7 @@ export const NEAR_MISSES = [
   'Bash(npx -y @modelcontextprotocol/server-github)',
   'Bash(python -m pytest tests/test_token_refresh.py)',
   'Bash(cat ~/.aws/credentials)',
+  'Bash(gh secret set DEPLOY_TOKEN --env production)',
+  'Bash(gh secret set DEPLOY_TOKEN --body "$TOKEN")',
+  'Bash(gh secret set DEPLOY_TOKEN < token.txt)',
 ];

@@ -80,7 +80,8 @@ export function run(argv, { out = (s) => process.stdout.write(s + '\n'), err = (
     return 0;
   }
   if (!total) {
-    out(`allowleak: no credentials in ${source.files.length - broken.length} file${source.files.length - broken.length === 1 ? '' : 's'}.`);
+    const read = source.files.length - broken.length;
+    if (read) out(`allowleak: no credentials in ${read} file${read === 1 ? '' : 's'}.`);
     for (const r of results.filter((x) => x.localTracked)) out(`note: ${r.path} is committed. Claude Code keeps this file for one machine and adds it to .gitignore when it creates it.`);
     return broken.length ? 2 : 0;
   }

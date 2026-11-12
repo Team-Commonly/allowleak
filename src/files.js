@@ -54,8 +54,11 @@ export function walk(start) {
   // terms, so there is no root to line up (Windows short names, macOS /private/var).
   const inGit = Boolean(gitRoot(dir));
   const rels = found.map((p) => relative(dir, p).split('\\').join('/'));
-  const tracked = new Set(inGit && rels.length ? (git(dir, ['ls-files', '-z', '--', ...rels]) || '').split('\0').filter(Boolean) : []);
-  const ignored = new Set(inGit && rels.length ? (git(dir, ['check-ignore', '--stdin', '-z'], rels.join('\0') + '\0') || '').split('\0').filter(Boolean) : []);
+  // One git call per file: a path under a symlinked folder makes git refuse a whole batch
+  // ("beyond a symbolic link"), which would lose every other file's answer.
+  const ok = (args) => { try { execFileSync('git', args, { cwd: dir, stdio: 'ignore' }); return true; } catch { return false; } };
+  const tracked = new Set(inGit ? rels.filter((rel) => ok(['ls-files', '--error-unmatch', '--', rel])) : []);
+  const ignored = new Set(inGit ? rels.filter((rel) => !tracked.has(rel) && ok(['check-ignore', '-q', '--', rel])) : []);
   return found.map((abs, i) => [abs, rels[i]]).sort((a, b) => (a[1] < b[1] ? -1 : 1)).map(([abs, rel]) => {
     const status = !inGit ? 'no-git' : tracked.has(rel) ? 'tracked' : ignored.has(rel) ? 'ignored' : 'untracked';
     return { path: relative(process.cwd(), abs) || abs, status, read: () => readSmall(abs) };
