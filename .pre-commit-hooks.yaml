@@ -1,0 +1,6 @@
+- id: allowleak
+  name: allowleak (credentials in agent permission rules)
+  entry: allowleak --staged
+  language: node
+  pass_filenames: false
+  always_run: true

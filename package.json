@@ -1,0 +1,13 @@
+{
+  "name": "allowleak",
+  "version": "0.1.0",
+  "description": "Find passwords and tokens in the permission rules Claude Code and Codex saved. A pre-commit check; local only.",
+  "type": "module",
+  "bin": { "allowleak": "bin/allowleak.js" },
+  "files": ["bin", "src", "README.md", "LICENSE"],
+  "engines": { "node": ">=18" },
+  "scripts": { "test": "node --test" },
+  "keywords": ["claude-code", "codex", "secrets", "pre-commit", "permissions", "security"],
+  "license": "Apache-2.0",
+  "repository": { "type": "git", "url": "git+https://github.com/Team-Commonly/allowleak.git" }
+}
